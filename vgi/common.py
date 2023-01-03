@@ -16,9 +16,11 @@ import torch
 import torch.nn.functional as F
 from .pytorch_msssim import ssim
 import scipy.stats as stats
+from scipy import ndimage
 
 __all__ = ()
-__all__ += ('rpad', 'lpad', 'pround', 'truncatedNormal', 'getFiles', 'normalizeRange', 'normalize',
+__all__ += ('sobel3d',
+            'rpad', 'lpad', 'pround', 'truncatedNormal', 'getFiles', 'normalizeRange', 'normalize',
             'featureORB', 'getFeatureLevel', 'featureValue', 
             'loadImg', 'loadImage', 'loadGrayImage', 'loadImgORB', 'loadVolume',
             'grayToRGB', 'reverseRGB', 'toU8', 'inverseIntensity',
@@ -39,6 +41,19 @@ __all__ += ('rpad', 'lpad', 'pround', 'truncatedNormal', 'getFiles', 'normalizeR
             'ImageSetFig', 'unfoldImage', 'unfoldCenterImage',
             'clone', 'toNumpy', 'toNumpyImage', 'toTorchImage', 'showTorchImage'            
             )
+
+# data: (images, height, width, [channels])
+def sobel3d(data, normal = True, return_all = False):
+    dz = ndimage.sobel(data, axis= 0)
+    dy = ndimage.sobel(data, axis= 1)
+    dx = ndimage.sobel(data, axis= 2)
+    edge = np.sqrt(dx * dx + dy * dy + dz * dz)
+    if normal:
+        edge = normalize(edge)
+    if return_all:
+        return edge, dx, dy, dz
+    else:
+        return edge
 
 def rpad(s, n, c = '0'):
     m = n - len(s)
