@@ -101,16 +101,19 @@ class CtDataset(Dataset):
             for filename in self.filenames:
                 npy_name = filename + '.npy'
                 input_path = self.input_dir + npy_name
-                target_path = self.target_dir + npy_name
                 input_data= np.load(input_path).astype(dtype = self.np_dtype)
-                target_data = np.load(target_path).astype(dtype = self.np_dtype)  
+                target_data = None
+                if not (self.target_dir is None):
+                    target_path = self.target_dir + npy_name
+                    target_data = np.load(target_path).astype(dtype = self.np_dtype)  
                 if self.normalize:
                     input_vr = (np.min(input_data), np.max(input_data))
-                    target_vr = (np.min(target_data), np.max(target_data))
                     self.input_vranges[filename] = (input_vr)
-                    self.target_vranges[filename] = (target_vr)
-                    input_data = vgi.normalize(input_data) 
-                    target_data = vgi.normalize(target_data) 
+                    if not (self.target_dir is None):
+                        input_data = vgi.normalize(input_data) 
+                        target_vr = (np.min(target_data), np.max(target_data))
+                        self.target_vranges[filename] = (target_vr)                    
+                        target_data = vgi.normalize(target_data) 
 
                 self.input_dataset[filename] = input_data
                 self.target_dataset[filename] = target_data 
@@ -129,22 +132,28 @@ class CtDataset(Dataset):
                 else:    
                     npy_name = filename + '.npy'
                     input_path = self.input_dir + npy_name
-                    target_path = self.target_dir + npy_name
                     self.input_file = np.load(input_path).astype(dtype = self.np_dtype)
-                    self.target_file = np.load(target_path).astype(dtype = self.np_dtype)                 
                     if self.normalize:
                         self.input_file = vgi.normalize(self.input_file)
-                        self.target_file = vgi.normalize(self.target_file)                    
+                    self.target_file = None
+                    if not(self.target_dir is None):
+                        target_path = self.target_dir + npy_name
+                        self.target_file = np.load(target_path).astype(dtype = self.np_dtype)                 
+                        if self.normalize:
+                            self.target_file = vgi.normalize(self.target_file)                    
                 self.filename = filename         
 
             row, row_e, col, col_e = self.patch_ranges[patch_id]    
+
             input_data = self.input_file[image_id, row:row_e, col:col_e]
-            target_data = self.target_file[image_id, row:row_e, col:col_e]
-                
             input_data = torch.tensor(input_data, dtype = self.torch_dtype, device = self.device)
-            target_data = torch.tensor(target_data, dtype = self.torch_dtype, device = self.device)
             input_data = input_data.unsqueeze(0)
-            target_data = target_data.unsqueeze(0)
+
+            target_data = None
+            if not(self.target_dir is None):
+                target_data = self.target_file[image_id, row:row_e, col:col_e]
+                target_data = torch.tensor(target_data, dtype = self.torch_dtype, device = self.device)
+                target_data = target_data.unsqueeze(0)
 
             return input_data, target_data, filename, image_id, patch_id   
         # CtDataset::item          
@@ -160,41 +169,71 @@ class CtDataset(Dataset):
             else:
                 npy_name = filename + '.npy'
                 input_path = self.input_dir + npy_name
-                target_path = self.target_dir + npy_name  
-
                 self.input_file = np.load(input_path).astype(dtype = self.np_dtype)
-                self.target_file = np.load(target_path).astype(dtype = self.np_dtype) 
                 if self.normalize:
                     self.input_file = vgi.normalize(self.input_file)
-                    self.target_file = vgi.normalize(self.target_file)                 
+
+                self.target_file = None
+                if not(self.target_dir is None):
+                    target_path = self.target_dir + npy_name  
+                    self.target_file = np.load(target_path).astype(dtype = self.np_dtype) 
+                    if self.normalize:
+                        self.target_file = vgi.normalize(self.target_file)  
+
             self.filename = filename  
                 
             input_data = torch.tensor(self.input_file, dtype = self.torch_dtype, device = self.device)
             input_data = input_data.unsqueeze(1)
-            if target:
+            if target and not(self.target_dir is None):
                 target_data = torch.tensor(self.target_file, dtype = self.torch_dtype, device = self.device)
                 target_data = target_data.unsqueeze(1)   
             else:
                 target_data = None
             
-            
             if image_id is None:
-                if target:
+                if target and not(self.target_dir is None):
                     return input_data, target_data 
                 else:    
                     return input_data                           
             elif patch_id is None:
-                if target:
+                if target and not(self.target_dir is None):
                     return input_data[image_id].unsqueeze(0), target_data[image_id].unsqueeze(0)
                 else:   
                     return input_data[image_id].unsqueeze(0)  
             else:
                 row, row_e, col, col_e = self.patch_ranges[patch_id] 
-                if target:   
+                if target and not(self.target_dir is None):   
                     return input_data[image_id, :, row:row_e, col:col_e].unsqueeze(0), target_data[image_id, :, row:row_e, col:col_e].unsqueeze(0)  
                 else:         
                     return input_data[image_id, :, row:row_e, col:col_e].unsqueeze(0)   
         # CtDataset::volume  
+
+        def rawdata(self, filename, target = True):
+            if self.mem:
+                self.input_file = self.input_dataset[filename]
+                self.target_file = self.target_dataset[filename]
+            else:
+                npy_name = filename + '.npy'
+                input_path = self.input_dir + npy_name
+                self.input_file = np.load(input_path).astype(dtype = self.np_dtype)
+                if self.normalize:
+                    self.input_file = vgi.normalize(self.input_file)
+
+                self.target_file = None
+                if not(self.target_dir is None):
+                    target_path = self.target_dir + npy_name  
+                    self.target_file = np.load(target_path).astype(dtype = self.np_dtype) 
+                    if self.normalize:
+                        self.target_file = vgi.normalize(self.target_file)  
+
+            self.filename = filename  
+            if target and not(self.target_dir is None):
+                return self.input_file, self.target_file 
+            else:    
+                return self.input_file                           
+       
+        # CtDataset::rawdata  
+
 
         # For model output
         def loadInputPatches(self, file_id, image_s, patch_id, image_e = None, target = False):
@@ -206,13 +245,16 @@ class CtDataset(Dataset):
                 else:
                     npy_name = filename + '.npy'
                     input_path = self.input_dir + npy_name
-                    target_path = self.target_dir + npy_name  
-
                     self.input_file = np.load(input_path).astype(dtype = self.np_dtype)
-                    self.target_file = np.load(target_path).astype(dtype = self.np_dtype) 
                     if self.normalize:
                         self.input_file = vgi.normalize(self.input_file)
-                        self.target_file = vgi.normalize(self.target_file)
+
+                    self.target_file = None
+                    if not(self.target_dir is None):
+                        target_path = self.target_dir + npy_name  
+                        self.target_file = np.load(target_path).astype(dtype = self.np_dtype) 
+                        if self.normalize:
+                            self.target_file = vgi.normalize(self.target_file)
                 self.filename = filename
             if image_e is None:
                 image_e = image_s + 1
@@ -222,8 +264,9 @@ class CtDataset(Dataset):
             input_patches = input_images[..., row:row_e, col:col_e] #[n, h, w]
             _input_patches = torch.tensor(input_patches, dtype = self.torch_dtype, device = self.device)
             _input_patches = _input_patches.unsqueeze(1) #[n, 1, h, w]
-            if target == False:
+            if target == False or (self.target_dir is None):
                 return _input_patches
+
             target_images = self.target_file[image_s:image_e] #[n, h, w]
             target_patches = target_images[..., row:row_e, col:col_e] #[n, h, w]
             _target_patches = torch.tensor(target_patches, dtype = self.torch_dtype, device = self.device)
@@ -239,7 +282,7 @@ class CtDataset(Dataset):
                 _input_patches = self.loadInputPatches(file_id = file_id, patch_id = patch_id,
                                                        image_s = image_id, image_e = image_id + batch_size, 
                                                        target = target)
-                if target:
+                if target and not(self.target_dir is None):
                     _target_patches = _input_patches[1]
                     _input_patches = _input_patches[0]
                 if model is None:
